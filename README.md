@@ -26,5 +26,6 @@ For these instructions, I will assume you have signed up for a free AWS account 
 
 ## Credits
 Thanks to the following sources! These were referenced/used in creating this template.
-[Crosstalk Solutions - Definitive Guide to Hosted UniFi](https://crosstalksolutions.com/definitive-guide-to-hosted-unifi/)
-[Steve Jenkins - unifi-linux-utils](https://github.com/stevejenkins/unifi-linux-utils)
+
+ - [Crosstalk Solutions - Definitive Guide to Hosted UniFi](https://crosstalksolutions.com/definitive-guide-to-hosted-unifi/)
+ - [Steve Jenkins - unifi-linux-utils](https://github.com/stevejenkins/unifi-linux-utils)
