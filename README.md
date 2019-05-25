@@ -23,6 +23,7 @@ For these instructions, I will assume you have signed up for a free AWS account 
  5. Enter a Stack Name (just for your future reference) and fill out all the parameters. [**Note: The t2.micro instance type is available for free tier.**](https://aws.amazon.com/free/?all-free-tier.sort-by=item.additionalFields.SortRank&all-free-tier.sort-order=asc&awsf.Free%20Tier%20Types=categories#featured) Click Next.
  6. On the Stack Options page, click next. Then, click Create Stack.
  7. At this point, you should click on the Resources tab for your stack. Shortly after the template begins creating the resources, you will see an EIP listed. You will need to create a DNS A record for the FQDN that points to this IP address.
+ 8. You should now be able to navigate to https://<FQDN>:8443 and setup your UniFi Controller.
 
 ## Credits
 Thanks to the following sources! These were referenced/used in creating this template.
