@@ -1,0 +1,334 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: AWS CloudFormation UniFi Controller Template.
+Parameters:
+    InstanceType:
+        Description: Controller EC2 instance type
+        Type: String
+        Default: t2.micro
+        AllowedValues:
+            - t2.micro
+            - t3a.nano
+            - t3a.micro
+            - t3a.small
+            - t3a.medium
+            - t3a.large
+            - t3a.xlarge
+            - t3a.2xlarge
+        ConstraintDescription: This must be a valid EC2 instance type.
+    SSHLocation:
+        Description: >-
+            The IP address range that can be used to SSH to the Controller. All other
+            IP addresses will be denied.
+        Type: String
+        MinLength: '9'
+        MaxLength: '18'
+        Default: 0.0.0.0/0
+        AllowedPattern: '(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})'
+        ConstraintDescription: Must be a valid IP CIDR range of the form x.x.x.x/x.
+    KeyName:
+        Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
+        Type: 'AWS::EC2::KeyPair::KeyName'
+        ConstraintDescription: Choose an existing EC2 KeyPair.
+    SSL:
+        Description: >-
+            Do you want to use Let's Encrypt? WARNING: Read documentation before
+            changing this parameter.
+        Type: String
+        AllowedValues:
+            - 'No'
+            - 'Yes'
+        Default: 'No'
+    FQDN:
+        Description: >-
+            Enter the FQDN you want the UniFi Controller to use. Must be a valid FQDN.
+            For example, unifi.companyname.com
+        Type: String
+    Email:
+        Description: >-
+            Enter your email for LetsEncrypt. This must be a valid email.
+        Type: String
+Mappings:
+    RegionMap:
+        us-east-1:
+            HVM64: ami-0a313d6098716f372
+        us-east-2:
+            HVM64: ami-0c55b159cbfafe1f0
+        us-west-1:
+            HVM64: ami-06397100adf427136
+        us-west-2:
+            HVM64: ami-005bdb005fb00e791
+        ca-central-1:
+            HVM64: ami-01b60a3259250381b
+        eu-central-1:
+            HVM64: ami-090f10efc254eaf55
+        eu-west-1:
+            HVM64: ami-08d658f84a6d84a80
+        eu-west-2:
+            HVM64: ami-07dc734dc14746eab
+        eu-west-3:
+            HVM64: ami-03bca18cb3dc173c9
+        eu-north-1:
+            HVM64: ami-5e9c1520
+        ap-northeast-1:
+            HVM64: ami-0eb48a19a8d81e20b
+        ap-northeast-2:
+            HVM64: ami-078e96948945fc2c9
+        ap-southeast-1:
+            HVM64: ami-0dad20bd1b9c8c004
+        ap-southeast-2:
+            HVM64: ami-0b76c3b150c6b1423
+        ap-south-1:
+            HVM64: ami-09f4cd7c0b533b081
+        sa-east-1:
+            HVM64: ami-09f4cd7c0b533b081
+Conditions:
+    EnableSSL: !Equals [ !Ref SSL, Yes ]
+Resources:
+    VPC:
+        Type: 'AWS::EC2::VPC'
+        Properties:
+            CidrBlock: 10.0.0.0/28
+            EnableDnsHostnames: true
+            EnableDnsSupport: true
+            Tags:
+                - Key: Name
+                  Value: VPC for UniFi Controller
+    InternetGateway:
+        Type: 'AWS::EC2::InternetGateway'
+        Properties:
+            Tags:
+                - Key: Name
+                  Value: Internet Gateway for UniFi Controller
+    VPCGatewayAttachment:
+        Type: 'AWS::EC2::VPCGatewayAttachment'
+        Properties:
+            VpcId: !Ref VPC
+            InternetGatewayId: !Ref InternetGateway
+    Subnet:
+        Type: 'AWS::EC2::Subnet'
+        Properties:
+            VpcId: !Ref VPC
+            CidrBlock: 10.0.0.0/28
+            Tags:
+                - Key: Name
+                  Value: Subnet for UniFi Controller
+    RouteTable:
+        Type: 'AWS::EC2::RouteTable'
+        Properties:
+            VpcId: !Ref VPC
+            Tags:
+                - Key: Name
+                  Value: Route Table for UniFi Controller
+    Route:
+        Type: 'AWS::EC2::Route'
+        DependsOn: VPCGatewayAttachment
+        Properties:
+            DestinationCidrBlock: 0.0.0.0/0
+            GatewayId: !Ref InternetGateway
+            RouteTableId: !Ref RouteTable
+    SubnetRouteTableAssociation:
+        Type: 'AWS::EC2::SubnetRouteTableAssociation'
+        Properties:
+            SubnetId: !Ref Subnet
+            RouteTableId: !Ref RouteTable
+    EIP:
+        Type: 'AWS::EC2::EIP'
+        Properties:
+            Domain: !Ref VPC
+    EIPAssociation:
+        Type: 'AWS::EC2::EIPAssociation'
+        Properties:
+            AllocationId: !GetAtt EIP.AllocationId
+            NetworkInterfaceId: !Ref NetworkInterface
+    NetworkInterface:
+        Type: 'AWS::EC2::NetworkInterface'
+        Properties:
+            SubnetId: !Ref Subnet
+            Description: Interface for UniFi Controller
+            GroupSet: 
+                - !Ref InstanceSecurityGroup
+            SourceDestCheck: 'true'
+    EC2Instance:
+        Type: 'AWS::EC2::Instance'
+        CreationPolicy:
+            ResourceSignal:
+                Timeout: PT7M
+                Count: '1'
+        Metadata:
+            AWS::CloudFormation::Init:
+                configSets:
+                    full_install:
+                        - SetupCFN
+                        - SetupMongoDB1
+                        - SetupMongoDB2
+                        - SetupUniFi1
+                        - SetupUniFi2
+                        - SetupLetsEncrypt1
+                        - SetupLetsEncrypt2
+                SetupCFN:
+                    files:
+                        /etc/cfn/cfn-hup.conf:
+                            content: !Sub |
+                                [main]
+                                stack=${AWS::StackId}
+                                region=${AWS::Region}
+                            mode: '000400'
+                            owner: root
+                            group: root
+                        /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+                            content: !Sub | 
+                                [cfn-auto-reloader-hook]
+                                triggers=post.update
+                                path=Resources.EC2Instance.Metadata.AWS::CloudFormation::Init
+                                action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource EC2Instance --configsets full_install --region ${AWS::Region}
+                                runas=root
+                        /lib/systemd/system/cfn-hup.service:
+                            content: !Sub | 
+                                [Unit]
+                                Description=cfn-hup daemon
+                                [Service]
+                                Type=simple
+                                ExecStart=/opt/aws/bin/cfn-hup
+                                Restart=always
+                                [Install]
+                                WantedBy=multi-user.target
+                    commands:
+                        01enable_cfn_hup:
+                            command: systemctl enable cfn-hup.service
+                        02start_cfn_hup:
+                            command: systemctl start cfn-hup.service
+                SetupMongoDB1:
+                    commands:
+                        import_public_key:
+                            command: apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 9ECBEC467F0CEB10
+                        add_source_list:
+                            command: >-
+                                echo 'deb http://repo.mongodb.org/apt/ubuntu trusty/mongodb-org/3.0 multiverse' | sudo tee /etc/apt/sources.list.d/mongodb-org-3.0.list
+                        update:
+                            command: apt update -y
+                SetupMongoDB2:
+                    packages:
+                        apt:
+                            mongodb-org: []
+                SetupLetsEncrypt1:
+                    commands:
+                        add_ppa:
+                            command: add-apt-repository ppa:certbot/certbot
+                        update:
+                            command: apt update -y
+                SetupLetsEncrypt2:
+                    packages:
+                        apt:
+                            python-certbot-apache: []
+                    commands:
+                        1gen_ssl:
+                            command: !Sub |
+                                certbot -n --agree-tos --email ${Email} --apache -d ${FQDN}
+                        2get_script:
+                            command: wget https://raw.githubusercontent.com/bironeaj/unifi-linux-utils/master/unifi_ssl_import.sh -O /usr/local/bin/unifi_ssl_import.sh
+                        3change_permission:
+                            command: chmod +x /usr/local/bin/unifi_ssl_import.sh
+                        4add_fqdn_to_script:
+                            command: !Sub |
+                                sed -i '11i UNIFI_HOSTNAME=${FQDN}' /usr/local/bin/unifi_ssl_import.sh
+                        5import_ssl:
+                            command: /usr/local/bin/unifi_ssl_import.sh
+                SetupUniFi1:
+                    commands:
+                        import_public_key:
+                            command: apt-key adv --keyserver keyserver.ubuntu.com --recv 06E85760C0A52C50
+                        add_source_list:
+                            command: >-
+                                echo 'deb http://www.ui.com/downloads/unifi/debian stable ubiquiti' | sudo tee /etc/apt/sources.list.d/100-ubnt-unifi.list
+                        update:
+                            command: apt update -y
+                SetupUniFi2:
+                    packages:
+                        apt:
+                            apt-transport-https: []
+                            unifi: []
+        Properties:
+            InstanceType: !Ref InstanceType
+            Tags:
+                - Key: Name
+                  Value: UniFi Controller
+            NetworkInterfaces:
+                - NetworkInterfaceId: !Ref NetworkInterface
+                  DeviceIndex: '0'
+            KeyName: !Ref KeyName
+            ImageId: !FindInMap 
+                - RegionMap
+                - !Ref 'AWS::Region'
+                - HVM64
+            UserData:
+                'Fn::Base64':
+                    !Sub |
+                        #!/bin/bash -xe
+                        apt-get update -y
+                        apt-get install -y python-pip
+                        mkdir -p /opt/aws/bin
+                        python /usr/lib/python2.7/dist-packages/easy_install.py --script-dir /opt/aws/bin https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz
+                        /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource EC2Instance --configsets full_install --region ${AWS::Region}
+                        /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region}
+    InstanceSecurityGroup:
+        Type: 'AWS::EC2::SecurityGroup'
+        Properties:
+            VpcId: !Ref VPC
+            GroupDescription: Enable UniFi Controller ports + SSH
+            SecurityGroupIngress:
+                - IpProtocol: udp
+                  FromPort: '3478'
+                  ToPort: '3478'
+                  CidrIp: 0.0.0.0/0
+                  Description: Port used for STUN.
+                - IpProtocol: tcp
+                  FromPort: '8080'
+                  ToPort: '8080'
+                  CidrIp: 0.0.0.0/0
+                  Description: Port used for device and controller communication.
+                - IpProtocol: tcp
+                  FromPort: '8443'
+                  ToPort: '8443'
+                  CidrIp: 0.0.0.0/0
+                  Description: Port used for controller GUI/API as seen in a web browser.
+                - IpProtocol: tcp
+                  FromPort: '8880'
+                  ToPort: '8880'
+                  CidrIp: 0.0.0.0/0
+                  Description: Port used for HTTP portal redirection.
+                - IpProtocol: tcp
+                  FromPort: '8843'
+                  ToPort: '8843'
+                  CidrIp: 0.0.0.0/0
+                  Description: Port used for HTTPS portal redirection.
+                - IpProtocol: tcp
+                  FromPort: '6789'
+                  ToPort: '6789'
+                  CidrIp: 0.0.0.0/0
+                  Description: Port used for UniFi mobile speed test.
+                - IpProtocol: tcp
+                  FromPort: '22'
+                  ToPort: '22'
+                  CidrIp: !Ref SSHLocation
+                  Description: SSH Access
+                - IpProtocol: tcp
+                  FromPort: '80'
+                  ToPort: '80'
+                  CidrIp: 0.0.0.0/0
+                  Description: Lets Encrypt
+                - IpProtocol: tcp
+                  FromPort: '443'
+                  ToPort: '443'
+                  CidrIp: 0.0.0.0/0
+                  Description: Lets Encrypt
+Outputs:
+    ARecord:
+        Description: DNS A Record IP
+        Value: !GetAtt EC2Instance.PublicIp
+    ControllerURL:
+        Description: URL for UniFi Controller
+        Value: !Join 
+            - ''
+            - - 'https://'
+              - !GetAtt EC2Instance.PublicDnsName
+              - ':8443'
