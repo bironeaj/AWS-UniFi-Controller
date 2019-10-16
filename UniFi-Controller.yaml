@@ -50,9 +50,9 @@ Parameters:
 Mappings:
     RegionMap:
         us-east-1:
-            HVM64: ami-0a313d6098716f372
+            HVM64: ami-04b9e92b5572fa0d1
         us-east-2:
-            HVM64: ami-0c55b159cbfafe1f0
+            HVM64: ami-0d5d9d301c853a04a
         us-west-1:
             HVM64: ami-06397100adf427136
         us-west-2:
@@ -92,13 +92,13 @@ Resources:
             EnableDnsSupport: true
             Tags:
                 - Key: Name
-                  Value: VPC for UniFi Controller
+                  Value: UniFi-VPC
     InternetGateway:
         Type: 'AWS::EC2::InternetGateway'
         Properties:
             Tags:
                 - Key: Name
-                  Value: Internet Gateway for UniFi Controller
+                  Value: UniFi-Internet Gateway
     VPCGatewayAttachment:
         Type: 'AWS::EC2::VPCGatewayAttachment'
         Properties:
@@ -111,14 +111,14 @@ Resources:
             CidrBlock: 10.0.0.0/28
             Tags:
                 - Key: Name
-                  Value: Subnet for UniFi Controller
+                  Value: UniFi-Subnet
     RouteTable:
         Type: 'AWS::EC2::RouteTable'
         Properties:
             VpcId: !Ref VPC
             Tags:
                 - Key: Name
-                  Value: Route Table for UniFi Controller
+                  Value: UniFi-Route Table
     Route:
         Type: 'AWS::EC2::Route'
         DependsOn: VPCGatewayAttachment
@@ -251,7 +251,7 @@ Resources:
             InstanceType: !Ref InstanceType
             Tags:
                 - Key: Name
-                  Value: UniFi Controller
+                  Value: UniFi-Controller
             NetworkInterfaces:
                 - NetworkInterfaceId: !Ref NetworkInterface
                   DeviceIndex: '0'
